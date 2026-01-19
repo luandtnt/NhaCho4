@@ -7,6 +7,7 @@ import { TerminateAgreementDto } from './dto/terminate-agreement.dto';
 import { RenewAgreementDto } from './dto/renew-agreement.dto';
 import { RequestActionDto } from './dto/request-action.dto';
 import { RejectAgreementDto } from './dto/reject-agreement.dto';
+import { PartyHelper } from '../../../common/helpers/party.helper';
 
 @Injectable()
 export class AgreementService {
@@ -206,15 +207,26 @@ export class AgreementService {
 
     const where: any = { org_id: orgId };
 
+    // Role-based isolation
+    if (userRole === 'Landlord' && userId) {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId) {
+        where.landlord_party_id = landlordPartyId;
+      }
+    } else if (userRole === 'Tenant' && userId) {
+      const tenantPartyId = await PartyHelper.getTenantPartyId(this.prisma, userId, orgId);
+      if (tenantPartyId) {
+        where.tenant_party_id = tenantPartyId;
+      }
+    }
+
     // Filter by state
     if (query.state) {
       where.state = query.state;
     }
 
-    // Filter by tenant (for tenant role)
-    if (userRole === 'Tenant' && userId) {
-      where.tenant_party_id = userId;
-    } else if (query.tenant_party_id) {
+    // Filter by tenant (for explicit filtering)
+    if (query.tenant_party_id && !where.tenant_party_id) {
       where.tenant_party_id = query.tenant_party_id;
     }
 

@@ -2,12 +2,16 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../platform/prisma/prisma.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
+import { PartyHelper } from '../../../common/helpers/party.helper';
 
 @Injectable()
 export class AssetService {
   constructor(private prisma: PrismaService) {}
 
-  async create(orgId: string, dto: CreateAssetDto) {
+  async create(orgId: string, userId: string, dto: CreateAssetDto) {
+    // Get landlord party ID
+    const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+
     // Reject obviously invalid asset_types (starting with __)
     if (dto.asset_type.startsWith('__')) {
       throw new BadRequestException({
@@ -43,6 +47,7 @@ export class AssetService {
     const asset = await this.prisma.asset.create({
       data: {
         org_id: orgId,
+        landlord_party_id: landlordPartyId,
         asset_type: dto.asset_type,
         name: dto.name,
         address_json: dto.address_json || {},
@@ -54,11 +59,19 @@ export class AssetService {
     return asset;
   }
 
-  async findAll(orgId: string, page: number = 1, pageSize: number = 20, status?: string) {
+  async findAll(orgId: string, userId: string, userRole: string, page: number = 1, pageSize: number = 20, status?: string) {
     const pageNum = Number(page) || 1;
     const pageSizeNum = Number(pageSize) || 20;
     const skip = (pageNum - 1) * pageSizeNum;
     const where: any = { org_id: orgId };
+
+    // Role-based isolation
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId) {
+        where.landlord_party_id = landlordPartyId;
+      }
+    }
 
     // By default, exclude ARCHIVED assets unless explicitly requested
     if (status) {

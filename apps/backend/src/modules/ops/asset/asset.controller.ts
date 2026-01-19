@@ -29,7 +29,8 @@ export class AssetController {
   @ApiOperation({ summary: 'Tạo asset mới' })
   async create(@Req() req: any, @Body() dto: CreateAssetDto) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.assetService.create(orgId, dto);
+    const userId = req.user?.sub;
+    return this.assetService.create(orgId, userId, dto);
   }
 
   @Get()
@@ -44,7 +45,9 @@ export class AssetController {
     @Query('status') status?: string,
   ) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.assetService.findAll(orgId, page, pageSize, status);
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+    return this.assetService.findAll(orgId, userId, userRole, page, pageSize, status);
   }
 
   @Get(':id')

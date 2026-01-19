@@ -5,6 +5,7 @@ import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { IssueInvoiceDto } from './dto/issue-invoice.dto';
 import { InvoiceQueryDto } from './dto/invoice-query.dto';
 import { Prisma } from '@prisma/client';
+import { PartyHelper } from '../../../common/helpers/party.helper';
 
 @Injectable()
 export class InvoiceService {
@@ -204,13 +205,28 @@ export class InvoiceService {
   /**
    * Find all invoices with filters
    */
-  async findAll(orgId: string, query: InvoiceQueryDto) {
+  async findAll(orgId: string, userId: string, userRole: string, query: InvoiceQueryDto) {
     const page = query.page || 1;
     const pageSize = query.page_size || 20;
     const skip = (page - 1) * pageSize;
 
     // Build where clause
     const where: Prisma.InvoiceWhereInput = { org_id: orgId };
+
+    // Role-based isolation
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId) {
+        where.agreement = {
+          landlord_party_id: landlordPartyId,
+        };
+      }
+    } else if (userRole === 'Tenant') {
+      const tenantPartyId = await PartyHelper.getTenantPartyId(this.prisma, userId, orgId);
+      if (tenantPartyId) {
+        where.tenant_party_id = tenantPartyId;
+      }
+    }
 
     // Filter by state
     if (query.state) {

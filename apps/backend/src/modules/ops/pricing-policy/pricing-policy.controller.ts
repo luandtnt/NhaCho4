@@ -30,7 +30,7 @@ export class PricingPolicyController {
 
   @Get()
   async findAll(@Request() req, @Query() query: QueryPricingPolicyDto) {
-    return this.pricingPolicyService.findAll(req.user.org_id, query);
+    return this.pricingPolicyService.findAll(req.user.org_id, req.user.sub, req.user.role, query);
   }
 
   @Get(':id')

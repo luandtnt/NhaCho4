@@ -45,7 +45,7 @@ export class BookingController {
     @Query('page_size') pageSize?: number,
     @Query('tenant_party_id') tenantPartyId?: string,
   ) {
-    return this.bookingService.findAll(req.user.org_id, page, pageSize, tenantPartyId);
+    return this.bookingService.findAll(req.user.org_id, req.user.sub, req.user.role, page, pageSize, tenantPartyId);
   }
 
   @Get('bookings/:id')

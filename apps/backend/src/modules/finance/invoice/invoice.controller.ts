@@ -34,7 +34,7 @@ export class InvoiceController {
   @ApiQuery({ name: 'page', required: false, description: 'Page number' })
   @ApiQuery({ name: 'page_size', required: false, description: 'Page size' })
   findAll(@Request() req, @Query() query: InvoiceQueryDto) {
-    return this.invoiceService.findAll(req.user.org_id, query);
+    return this.invoiceService.findAll(req.user.org_id, req.user.sub, req.user.role, query);
   }
 
   @Get(':id')

@@ -2,12 +2,13 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../platform/prisma/prisma.service';
 import { CreateSpaceNodeDto } from './dto/create-space-node.dto';
 import { UpdateSpaceNodeDto } from './dto/update-space-node.dto';
+import { PartyHelper } from '../../../common/helpers/party.helper';
 
 @Injectable()
 export class SpaceNodeService {
   constructor(private prisma: PrismaService) {}
 
-  async create(orgId: string, dto: CreateSpaceNodeDto) {
+  async create(orgId: string, userId: string, dto: CreateSpaceNodeDto) {
     // Verify asset belongs to org
     const asset = await this.prisma.asset.findFirst({
       where: {
@@ -21,6 +22,18 @@ export class SpaceNodeService {
         error_code: 'VALIDATION_ERROR',
         message: 'Asset not found or does not belong to your organization',
       });
+    }
+
+    // Check landlord ownership for asset
+    const userRole = await this.getUserRole(userId, orgId);
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId && asset.landlord_party_id !== landlordPartyId) {
+        throw new BadRequestException({
+          error_code: 'FORBIDDEN',
+          message: 'You can only create space nodes for your own assets',
+        });
+      }
     }
 
     // Verify parent node if provided
@@ -52,6 +65,7 @@ export class SpaceNodeService {
       data: {
         org_id: orgId,
         asset_id: dto.asset_id,
+        landlord_party_id: asset.landlord_party_id,
         parent_id: dto.parent_id || null,
         node_type: dto.node_type,
         name: dto.name,
@@ -63,11 +77,27 @@ export class SpaceNodeService {
     return spaceNode;
   }
 
-  async findAll(orgId: string, assetId?: string, page: number = 1, pageSize: number = 50) {
+  private async getUserRole(userId: string, orgId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    return user?.role || '';
+  }
+
+  async findAll(orgId: string, userId: string, userRole: string, assetId?: string, page: number = 1, pageSize: number = 50) {
     const pageNum = Number(page) || 1;
     const pageSizeNum = Number(pageSize) || 50;
     const skip = (pageNum - 1) * pageSizeNum;
     const where: any = { org_id: orgId };
+
+    // Role-based isolation
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId) {
+        where.landlord_party_id = landlordPartyId;
+      }
+    }
 
     if (assetId) {
       where.asset_id = assetId;

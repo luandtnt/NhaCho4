@@ -3,16 +3,21 @@ import { PrismaService } from '../../platform/prisma/prisma.service';
 import { CreatePricingPolicyDto } from './dto/create-pricing-policy.dto';
 import { UpdatePricingPolicyDto } from './dto/update-pricing-policy.dto';
 import { QueryPricingPolicyDto } from './dto/query-pricing-policy.dto';
+import { PartyHelper } from '../../../common/helpers/party.helper';
 
 @Injectable()
 export class PricingPolicyService {
   constructor(private prisma: PrismaService) {}
 
   async create(orgId: string, userId: string, dto: CreatePricingPolicyDto) {
+    // Get landlord party ID
+    const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+
     // Create policy
     const policy = await this.prisma.pricingPolicy.create({
       data: {
         org_id: orgId,
+        landlord_party_id: landlordPartyId,
         name: dto.name,
         description: dto.description,
         status: 'ACTIVE',
@@ -53,8 +58,16 @@ export class PricingPolicyService {
     return policy;
   }
 
-  async findAll(orgId: string, query: QueryPricingPolicyDto) {
+  async findAll(orgId: string, userId: string, userRole: string, query: QueryPricingPolicyDto) {
     const where: any = { org_id: orgId };
+
+    // Role-based isolation
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId) {
+        where.landlord_party_id = landlordPartyId;
+      }
+    }
 
     if (query.property_category) {
       where.property_category = query.property_category;

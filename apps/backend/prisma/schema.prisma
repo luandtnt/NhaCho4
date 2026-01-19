@@ -153,8 +153,13 @@ model Party {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  organization      Organization @relation(fields: [org_id], references: [id])
-  invoices_as_tenant Invoice[]   @relation("InvoiceTenant")
+  organization         Organization     @relation(fields: [org_id], references: [id])
+  invoices_as_tenant   Invoice[]        @relation("InvoiceTenant")
+  rentable_items_owned RentableItem[]   @relation("RentableItemOwner")
+  listings_owned       Listing[]        @relation("ListingOwner")
+  assets_owned         Asset[]          @relation("AssetLandlord")
+  space_nodes_owned    SpaceNode[]      @relation("SpaceNodeLandlord")
+  pricing_policies     PricingPolicy[]  @relation("PricingPolicyOwner")
 
   @@index([org_id])
   @@map("parties")
@@ -201,44 +206,50 @@ model AuditLog {
 // ============================================================================
 
 model Asset {
-  id           String   @id @default(uuid())
-  org_id       String
-  asset_type   String   // Defined by ConfigBundle
-  name         String
-  address_json Json     @default("{}")
-  geo          String?  // PostGIS GEOGRAPHY(POINT, 4326) - stored as WKT
-  status       String   @default("ACTIVE")
-  attrs        Json     @default("{}")
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  org_id             String
+  landlord_party_id  String?
+  asset_type         String   // Defined by ConfigBundle
+  name               String
+  address_json       Json     @default("{}")
+  geo                String?  // PostGIS GEOGRAPHY(POINT, 4326) - stored as WKT
+  status             String   @default("ACTIVE")
+  attrs              Json     @default("{}")
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
-  organization Organization @relation(fields: [org_id], references: [id])
-  space_nodes  SpaceNode[]
+  organization      Organization @relation(fields: [org_id], references: [id])
+  landlord_party    Party?       @relation("AssetLandlord", fields: [landlord_party_id], references: [id])
+  space_nodes       SpaceNode[]
 
   @@index([org_id])
+  @@index([landlord_party_id])
   @@map("assets")
 }
 
 model SpaceNode {
-  id         String   @id @default(uuid())
-  org_id     String
-  asset_id   String
-  parent_id  String?
-  node_type  String   // building, floor, unit, room, bed, slot
-  name       String
-  path       String   // Materialized path: /b1/f2/u203
-  attrs      Json     @default("{}")
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  org_id             String
+  asset_id           String
+  landlord_party_id  String?
+  parent_id          String?
+  node_type          String   // building, floor, unit, room, bed, slot
+  name               String
+  path               String   // Materialized path: /b1/f2/u203
+  attrs              Json     @default("{}")
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
-  organization   Organization   @relation(fields: [org_id], references: [id])
-  asset          Asset          @relation(fields: [asset_id], references: [id])
-  parent         SpaceNode?     @relation("SpaceNodeHierarchy", fields: [parent_id], references: [id])
-  children       SpaceNode[]    @relation("SpaceNodeHierarchy")
-  rentable_items RentableItem[]
+  organization      Organization   @relation(fields: [org_id], references: [id])
+  asset             Asset          @relation(fields: [asset_id], references: [id])
+  landlord_party    Party?         @relation("SpaceNodeLandlord", fields: [landlord_party_id], references: [id])
+  parent            SpaceNode?     @relation("SpaceNodeHierarchy", fields: [parent_id], references: [id])
+  children          SpaceNode[]    @relation("SpaceNodeHierarchy")
+  rentable_items    RentableItem[]
 
   @@index([org_id, asset_id])
   @@index([org_id, path])
+  @@index([landlord_party_id])
   @@map("space_nodes")
 }
 
@@ -246,6 +257,7 @@ model RentableItem {
   id              String   @id @default(uuid())
   org_id          String
   space_node_id   String
+  landlord_party_id String?  // Owner of this rentable item
   code            String
   allocation_type String   // exclusive, capacity, slot
   capacity        Int?
@@ -323,6 +335,7 @@ model RentableItem {
 
   organization Organization @relation(fields: [org_id], references: [id])
   space_node   SpaceNode    @relation(fields: [space_node_id], references: [id])
+  landlord_party Party?     @relation("RentableItemOwner", fields: [landlord_party_id], references: [id], onDelete: SetNull)
   pricing_policy PricingPolicy? @relation(fields: [pricing_policy_id], references: [id], onDelete: SetNull)
   listings     ListingRentableItem[]
   bookings     Booking[]
@@ -331,6 +344,7 @@ model RentableItem {
 
   @@unique([org_id, space_node_id, code])
   @@index([org_id])
+  @@index([landlord_party_id])
   @@index([property_category])
   @@index([rental_duration_type])
   @@index([province])
@@ -351,6 +365,7 @@ model RentableItem {
 model PricingPolicy {
   id                      String    @id @default(uuid())
   org_id                  String
+  landlord_party_id       String?
   
   // Basic Info
   name                    String
@@ -402,6 +417,7 @@ model PricingPolicy {
   superseded_by           String?
   
   organization            Organization           @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  landlord_party          Party?                 @relation("PricingPolicyOwner", fields: [landlord_party_id], references: [id], onDelete: SetNull)
   creator                 User?                  @relation("PolicyCreator", fields: [created_by], references: [id], onDelete: SetNull)
   superseding_policy      PricingPolicy?         @relation("PolicySupersession", fields: [superseded_by], references: [id], onDelete: SetNull)
   superseded_policies     PricingPolicy[]        @relation("PolicySupersession")
@@ -410,6 +426,7 @@ model PricingPolicy {
   rentable_items          RentableItem[]
   
   @@index([org_id])
+  @@index([landlord_party_id])
   @@index([status])
   @@index([property_category])
   @@index([rental_duration_type])
@@ -614,6 +631,7 @@ model Agreement {
 model Listing {
   id              String    @id @default(uuid())
   org_id          String
+  landlord_party_id String?  // Owner of this listing
   title           String
   description     String?
   media           Json      @default("[]")
@@ -627,10 +645,12 @@ model Listing {
   updated_at      DateTime  @updatedAt
 
   organization   Organization          @relation(fields: [org_id], references: [id])
+  landlord_party Party?                @relation("ListingOwner", fields: [landlord_party_id], references: [id], onDelete: SetNull)
   rentable_items ListingRentableItem[]
   leads          Lead[]
 
   @@index([org_id, status])
+  @@index([landlord_party_id])
   @@index([is_featured, status])
   @@map("listings")
 }

@@ -5,6 +5,7 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { CheckAvailabilityDto, AvailabilityResponseDto } from './dto/check-availability.dto';
 import { CalculatePriceDto, PriceCalculationResponseDto, PriceBreakdownItemDto } from './dto/calculate-price.dto';
 import { CreateBookingEnhancedDto } from './dto/create-booking-enhanced.dto';
+import { PartyHelper } from '../../../common/helpers/party.helper';
 
 @Injectable()
 export class BookingService {
@@ -88,15 +89,30 @@ export class BookingService {
     return booking;
   }
 
-  async findAll(orgId: string, page: number = 1, pageSize: number = 50, tenantPartyId?: string) {
+  async findAll(orgId: string, userId: string, userRole: string, page: number = 1, pageSize: number = 50, tenantPartyId?: string) {
     const pageNum = Number(page) || 1;
     const pageSizeNum = Number(pageSize) || 50;
     const skip = (pageNum - 1) * pageSizeNum;
 
     const where: any = { org_id: orgId };
     
+    // Role-based isolation
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId) {
+        where.rentable_item = {
+          landlord_party_id: landlordPartyId,
+        };
+      }
+    } else if (userRole === 'Tenant') {
+      const tenantPartyIdFromUser = await PartyHelper.getTenantPartyId(this.prisma, userId, orgId);
+      if (tenantPartyIdFromUser) {
+        where.tenant_party_id = tenantPartyIdFromUser;
+      }
+    }
+    
     // Filter by tenant_party_id if provided (for tenant users to see only their bookings)
-    if (tenantPartyId) {
+    if (tenantPartyId && !where.tenant_party_id) {
       where.tenant_party_id = tenantPartyId;
     }
 
@@ -968,11 +984,23 @@ export class BookingService {
    * Get all active (checked-in) bookings for landlord
    */
   async getActiveBookings(orgId: string, userId: string) {
+    // Get landlord party ID
+    const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+
+    const where: any = {
+      org_id: orgId,
+      status: 'CHECKED_IN',
+    };
+
+    // Add landlord isolation
+    if (landlordPartyId) {
+      where.rentable_item = {
+        landlord_party_id: landlordPartyId,
+      };
+    }
+
     const bookings = await this.prisma.booking.findMany({
-      where: {
-        org_id: orgId,
-        status: 'CHECKED_IN',
-      },
+      where,
       include: {
         rentable_item: {
           select: {

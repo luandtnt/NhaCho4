@@ -30,7 +30,8 @@ export class RentableItemController {
   @ApiOperation({ summary: 'Tạo rentable item mới' })
   async create(@Req() req: any, @Body() dto: CreateRentableItemDto) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.rentableItemService.create(orgId, dto);
+    const userId = req.user?.sub;
+    return this.rentableItemService.create(orgId, userId, dto);
   }
 
   @Get()
@@ -41,7 +42,9 @@ export class RentableItemController {
     @Query() query: QueryRentableItemDto,
   ) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.rentableItemService.findAll(orgId, query);
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+    return this.rentableItemService.findAll(orgId, userId, userRole, query);
   }
 
   @Get(':id')

@@ -29,7 +29,8 @@ export class SpaceNodeController {
   @ApiOperation({ summary: 'Tạo space node mới' })
   async create(@Req() req: any, @Body() dto: CreateSpaceNodeDto) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.spaceNodeService.create(orgId, dto);
+    const userId = req.user?.sub;
+    return this.spaceNodeService.create(orgId, userId, dto);
   }
 
   @Get()
@@ -44,7 +45,9 @@ export class SpaceNodeController {
     @Query('page_size') pageSize?: number,
   ) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.spaceNodeService.findAll(orgId, assetId, page, pageSize);
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+    return this.spaceNodeService.findAll(orgId, userId, userRole, assetId, page, pageSize);
   }
 
   @Get(':id')

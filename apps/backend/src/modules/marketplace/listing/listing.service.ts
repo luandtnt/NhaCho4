@@ -2,12 +2,13 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../platform/prisma/prisma.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
+import { PartyHelper } from '../../../common/helpers/party.helper';
 
 @Injectable()
 export class ListingService {
   constructor(private prisma: PrismaService) {}
 
-  async create(orgId: string, dto: CreateListingDto) {
+  async create(orgId: string, userId: string, dto: CreateListingDto) {
     // Validate pricing
     if (dto.pricing_display && dto.pricing_display.from_amount !== undefined) {
       if (dto.pricing_display.from_amount <= 0) {
@@ -48,10 +49,18 @@ export class ListingService {
       }
     }
 
+    // Get landlord party ID
+    const landlordPartyId = await PartyHelper.getLandlordPartyId(
+      this.prisma,
+      userId,
+      orgId,
+    );
+
     // Create listing
     const listing = await this.prisma.listing.create({
       data: {
         org_id: orgId,
+        landlord_party_id: landlordPartyId,
         title: dto.title,
         description: dto.description || null,
         media: dto.media || [],
@@ -80,7 +89,14 @@ export class ListingService {
     return listing;
   }
 
-  async findAll(orgId: string, page: number = 1, pageSize: number = 20, status?: string) {
+  async findAll(
+    orgId: string,
+    userId: string,
+    userRole: string,
+    page: number = 1,
+    pageSize: number = 20,
+    status?: string,
+  ) {
     const pageNum = Number(page) || 1;
     const pageSizeNum = Number(pageSize) || 20;
     const skip = (pageNum - 1) * pageSizeNum;
@@ -91,6 +107,18 @@ export class ListingService {
     
     if (status) {
       where.status = status;
+    }
+
+    // Add landlord isolation
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(
+        this.prisma,
+        userId,
+        orgId,
+      );
+      if (landlordPartyId) {
+        where.landlord_party_id = landlordPartyId;
+      }
     }
 
     const [listings, total] = await Promise.all([
@@ -121,7 +149,7 @@ export class ListingService {
     };
   }
 
-  async findOne(orgId: string, id: string) {
+  async findOne(orgId: string, userId: string | null, userRole: string | null, id: string) {
     const listing = await this.prisma.listing.findFirst({
       where: {
         id,
@@ -143,11 +171,43 @@ export class ListingService {
       });
     }
 
+    // Check landlord ownership (only for landlord role)
+    if (userRole === 'Landlord' && userId) {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId && listing.landlord_party_id !== landlordPartyId) {
+        throw new NotFoundException({
+          error_code: 'NOT_FOUND',
+          message: 'Listing not found',
+        });
+      }
+    }
+
     return listing;
   }
 
-  async update(orgId: string, id: string, dto: UpdateListingDto) {
-    await this.findOne(orgId, id); // Check exists and belongs to org
+  async update(orgId: string, userId: string, userRole: string, id: string, dto: UpdateListingDto) {
+    // Check exists and ownership
+    const existing = await this.prisma.listing.findFirst({
+      where: { id, org_id: orgId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException({
+        error_code: 'NOT_FOUND',
+        message: 'Listing not found',
+      });
+    }
+
+    // Check landlord ownership
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId && existing.landlord_party_id !== landlordPartyId) {
+        throw new NotFoundException({
+          error_code: 'NOT_FOUND',
+          message: 'Listing not found',
+        });
+      }
+    }
 
     // Validate pricing if provided
     if (dto.pricing_display && dto.pricing_display.from_amount !== undefined) {
@@ -224,8 +284,29 @@ export class ListingService {
     return listing;
   }
 
-  async remove(orgId: string, id: string) {
-    await this.findOne(orgId, id); // Check exists and belongs to org
+  async remove(orgId: string, userId: string, userRole: string, id: string) {
+    // Check exists and ownership
+    const existing = await this.prisma.listing.findFirst({
+      where: { id, org_id: orgId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException({
+        error_code: 'NOT_FOUND',
+        message: 'Listing not found',
+      });
+    }
+
+    // Check landlord ownership
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId && existing.landlord_party_id !== landlordPartyId) {
+        throw new NotFoundException({
+          error_code: 'NOT_FOUND',
+          message: 'Listing not found',
+        });
+      }
+    }
 
     // Soft delete
     await this.prisma.listing.update({
@@ -237,7 +318,7 @@ export class ListingService {
   }
 
   async publish(orgId: string, id: string) {
-    const listing = await this.findOne(orgId, id);
+    const listing = await this.findOne(orgId, null, null, id);
 
     if (listing.status === 'ARCHIVED') {
       throw new BadRequestException({
@@ -261,7 +342,7 @@ export class ListingService {
   }
 
   async unpublish(orgId: string, id: string) {
-    const listing = await this.findOne(orgId, id);
+    const listing = await this.findOne(orgId, null, null, id);
 
     if (listing.status !== 'PUBLISHED') {
       throw new BadRequestException({
@@ -277,7 +358,7 @@ export class ListingService {
   }
 
   async addMedia(orgId: string, id: string, mediaUrls: any[]) {
-    const listing = await this.findOne(orgId, id);
+    const listing = await this.findOne(orgId, null, null, id);
 
     const currentMedia = (listing.media as any[]) || [];
     const updatedMedia = [...currentMedia, ...mediaUrls];

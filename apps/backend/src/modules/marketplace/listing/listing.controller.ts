@@ -30,7 +30,8 @@ export class ListingController {
   @ApiOperation({ summary: 'Tạo listing mới' })
   async create(@Req() req: any, @Body() dto: CreateListingDto) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.listingService.create(orgId, dto);
+    const userId = req.user?.sub;
+    return this.listingService.create(orgId, userId, dto);
   }
 
   @Get()
@@ -45,7 +46,9 @@ export class ListingController {
     @Query('status') status?: string,
   ) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.listingService.findAll(orgId, page, pageSize, status);
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+    return this.listingService.findAll(orgId, userId, userRole, page, pageSize, status);
   }
 
   @Get(':id')
@@ -53,7 +56,9 @@ export class ListingController {
   @ApiParam({ name: 'id', type: String })
   async findOne(@Req() req: any, @Param('id') id: string) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.listingService.findOne(orgId, id);
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+    return this.listingService.findOne(orgId, userId, userRole, id);
   }
 
   @Put(':id')
@@ -65,7 +70,9 @@ export class ListingController {
     @Body() dto: UpdateListingDto,
   ) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.listingService.update(orgId, id, dto);
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+    return this.listingService.update(orgId, userId, userRole, id, dto);
   }
 
   @Delete(':id')
@@ -73,7 +80,9 @@ export class ListingController {
   @ApiParam({ name: 'id', type: String })
   async remove(@Req() req: any, @Param('id') id: string) {
     const orgId = req.org_id || req.user?.org_id;
-    return this.listingService.remove(orgId, id);
+    const userId = req.user?.sub;
+    const userRole = req.user?.role;
+    return this.listingService.remove(orgId, userId, userRole, id);
   }
 
   @Post(':id/publish')

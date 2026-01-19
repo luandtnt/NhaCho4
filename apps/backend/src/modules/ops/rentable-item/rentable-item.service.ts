@@ -4,12 +4,16 @@ import { CreateRentableItemDto } from './dto/create-rentable-item.dto';
 import { UpdateRentableItemDto } from './dto/update-rentable-item.dto';
 import { QueryRentableItemDto } from './dto/query-rentable-item.dto';
 import { Prisma } from '@prisma/client';
+import { PartyHelper } from '../../../common/helpers/party.helper';
 
 @Injectable()
 export class RentableItemService {
   constructor(private prisma: PrismaService) {}
 
-  async create(orgId: string, dto: CreateRentableItemDto) {
+  async create(orgId: string, userId: string, dto: CreateRentableItemDto) {
+    // Get landlord party ID
+    const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+
     // Verify space node belongs to org
     const spaceNode = await this.prisma.spaceNode.findFirst({
       where: {
@@ -72,6 +76,7 @@ export class RentableItemService {
     const item = await this.prisma.rentableItem.create({
       data: {
         org_id: orgId,
+        landlord_party_id: landlordPartyId,
         space_node_id: dto.space_node_id,
         code: dto.code,
         allocation_type: dto.allocation_type,
@@ -107,7 +112,7 @@ export class RentableItemService {
     return item;
   }
 
-  async findAll(orgId: string, query: QueryRentableItemDto) {
+  async findAll(orgId: string, userId: string, userRole: string, query: QueryRentableItemDto) {
     const page = query.page || 1;
     const pageSize = query.page_size || 20;
     const skip = (page - 1) * pageSize;
@@ -116,6 +121,14 @@ export class RentableItemService {
     const where: Prisma.RentableItemWhereInput = {
       org_id: orgId,
     };
+
+    // Role-based isolation
+    if (userRole === 'Landlord') {
+      const landlordPartyId = await PartyHelper.getLandlordPartyId(this.prisma, userId, orgId);
+      if (landlordPartyId) {
+        where.landlord_party_id = landlordPartyId;
+      }
+    }
 
     // By default, exclude INACTIVE items unless explicitly requested
     if (query.status) {

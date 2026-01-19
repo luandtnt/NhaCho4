@@ -334,6 +334,7 @@ async function main() {
         data: {
           org_id: org1.id,
           space_node_id: spaceNode.id,
+          landlord_party_id: currentLandlordParty.id,  // Set owner
           code: `${propType.code}-${String(itemCounter).padStart(3, '0')}`,
           allocation_type: 'exclusive',
           status: 'ACTIVE',
@@ -377,6 +378,7 @@ async function main() {
       const listing = await prisma.listing.create({
         data: {
           org_id: org1.id,
+          landlord_party_id: currentLandlordParty.id,  // Set owner
           title: `${propType.name} ${[1, 2, 3, 4][i % 4]}PN tại ${district}, ${province}`,
           description: `${propType.name} đẹp, tiện nghi đầy đủ tại ${district}, ${province}. Diện tích ${30 + (i * 10)}m².`,
           media: [],
