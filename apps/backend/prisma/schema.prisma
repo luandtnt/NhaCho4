@@ -1,0 +1,897 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS - Property Type System
+// ============================================================================
+
+enum PriceUnit {
+  HOUR
+  NIGHT
+  MONTH
+}
+
+enum Direction {
+  EAST
+  WEST
+  SOUTH
+  NORTH
+  NORTHEAST
+  NORTHWEST
+  SOUTHEAST
+  SOUTHWEST
+}
+
+enum FurnishingLevel {
+  FULL
+  PARTIAL
+  NONE
+}
+
+enum UtilityBilling {
+  METER_PRIVATE
+  SHARED
+  OWNER_RATE
+  STATE_RATE
+}
+
+enum CancellationPolicy {
+  FLEXIBLE
+  MODERATE
+  STRICT
+}
+
+enum HousekeepingFrequency {
+  DAILY
+  WEEKLY
+  ON_REQUEST
+}
+
+enum GenderPolicy {
+  MALE
+  FEMALE
+  MIXED
+}
+
+// ============================================================================
+// PLATFORM / CORE
+// ============================================================================
+
+model Organization {
+  id         String   @id @default(uuid())
+  name       String
+  status     String   @default("ACTIVE") // ACTIVE, SUSPENDED, ARCHIVED
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  users          User[]
+  parties        Party[]
+  assets         Asset[]
+  config_bundles ConfigBundle[]
+  audit_logs     AuditLog[]
+  ledger_entries LedgerEntry[]
+  listings       Listing[]
+  leads          Lead[]
+  bookings       Booking[]
+  agreements     Agreement[]
+  invoices       Invoice[]
+  payments       Payment[]
+  tickets        Ticket[]
+  notifications  Notification[]
+  space_nodes    SpaceNode[]
+  rentable_items RentableItem[]
+  pricing_policies PricingPolicy[]
+
+  @@map("organizations")
+}
+
+model User {
+  id                 String   @id @default(uuid())
+  org_id             String
+  email              String
+  password_hash      String
+  role               String   // Tenant, Landlord, PropertyManager, OrgAdmin, PlatformAdmin
+  status             String   @default("ACTIVE")
+  scopes             Json?    @default("[]")
+  assigned_asset_ids Json?    @default("[]")
+  
+  // Profile fields
+  name               String?
+  phone              String?
+  emergency_contact  String?
+  id_number          String?  // CCCD/Passport for Landlord
+  
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [org_id], references: [id])
+  refresh_tokens RefreshToken[]
+  audit_logs_actor AuditLog[]   @relation("AuditLogActor")
+  tickets_reported Ticket[]     @relation("TicketReporter")
+  tickets_assigned Ticket[]     @relation("TicketAssigned")
+  notifications    Notification[]
+  created_pricing_policies PricingPolicy[] @relation("PolicyCreator")
+  pricing_policy_versions  PricingPolicyVersion[]
+
+  @@unique([org_id, email])
+  @@index([org_id])
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  user_id    String
+  token      String   @unique
+  expires_at DateTime
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model Party {
+  id         String   @id @default(uuid())
+  org_id     String
+  party_type String   // Tenant, Landlord, Manager
+  name       String
+  email      String?
+  phone      String?
+  metadata   Json     @default("{}")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization      Organization @relation(fields: [org_id], references: [id])
+  invoices_as_tenant Invoice[]   @relation("InvoiceTenant")
+
+  @@index([org_id])
+  @@map("parties")
+}
+
+model ConfigBundle {
+  id         String   @id @default(uuid())
+  org_id     String
+  bundle_id  String   // e.g., cfg_2026_01_04_001
+  version    String
+  status     String   @default("DRAFT") // DRAFT, ACTIVE, ARCHIVED
+  config     Json     // Full config JSON
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization Organization @relation(fields: [org_id], references: [id])
+
+  @@unique([org_id, bundle_id, version])
+  @@index([org_id, status])
+  @@map("config_bundles")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actor_id    String
+  org_id      String?
+  action      String
+  resource_id String?
+  request_id  String
+  metadata    Json     @default("{}")
+  created_at  DateTime @default(now())
+
+  actor        User?         @relation("AuditLogActor", fields: [actor_id], references: [id])
+  organization Organization? @relation(fields: [org_id], references: [id])
+
+  @@index([org_id, created_at])
+  @@index([actor_id])
+  @@index([request_id])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// PROPERTY OPS
+// ============================================================================
+
+model Asset {
+  id           String   @id @default(uuid())
+  org_id       String
+  asset_type   String   // Defined by ConfigBundle
+  name         String
+  address_json Json     @default("{}")
+  geo          String?  // PostGIS GEOGRAPHY(POINT, 4326) - stored as WKT
+  status       String   @default("ACTIVE")
+  attrs        Json     @default("{}")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  organization Organization @relation(fields: [org_id], references: [id])
+  space_nodes  SpaceNode[]
+
+  @@index([org_id])
+  @@map("assets")
+}
+
+model SpaceNode {
+  id         String   @id @default(uuid())
+  org_id     String
+  asset_id   String
+  parent_id  String?
+  node_type  String   // building, floor, unit, room, bed, slot
+  name       String
+  path       String   // Materialized path: /b1/f2/u203
+  attrs      Json     @default("{}")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization   Organization   @relation(fields: [org_id], references: [id])
+  asset          Asset          @relation(fields: [asset_id], references: [id])
+  parent         SpaceNode?     @relation("SpaceNodeHierarchy", fields: [parent_id], references: [id])
+  children       SpaceNode[]    @relation("SpaceNodeHierarchy")
+  rentable_items RentableItem[]
+
+  @@index([org_id, asset_id])
+  @@index([org_id, path])
+  @@map("space_nodes")
+}
+
+model RentableItem {
+  id              String   @id @default(uuid())
+  org_id          String
+  space_node_id   String
+  code            String
+  allocation_type String   // exclusive, capacity, slot
+  capacity        Int?
+  slot_config     Json?
+  status          String   @default("ACTIVE")
+  attrs           Json     @default("{}")
+  
+  // Property classification
+  property_category      String?
+  rental_duration_type   String?
+  min_rental_days        Int?     @default(1)
+  max_rental_days        Int?
+  pricing_unit           String?  @default("PER_MONTH")
+  
+  // Location (required for PUBLISHED listings)
+  address_full           String?
+  province               String?
+  district               String?
+  ward                   String?
+  geo_lat                Decimal? @db.Decimal(10, 8)
+  geo_lng                Decimal? @db.Decimal(11, 8)
+  
+  // Pricing & Contract
+  base_price             Decimal? @db.Decimal(15, 2)
+  price_unit             PriceUnit?
+  currency               String?  @default("VND")
+  min_rent_duration      Int?
+  deposit_amount         Decimal? @db.Decimal(15, 2)
+  booking_hold_deposit   Decimal? @db.Decimal(15, 2)
+  service_fee            Decimal? @db.Decimal(15, 2)
+  building_mgmt_fee      Decimal? @db.Decimal(15, 2)
+  
+  // Physical Details
+  area_sqm               Decimal? @db.Decimal(10, 2)
+  bedrooms               Int?
+  bathrooms              Int?
+  floors                 Int?
+  apartment_floor        Int?
+  floor_number           Int?     // Legacy field, keep for compatibility
+  direction              Direction?
+  balcony                Boolean?
+  frontage_m             Decimal? @db.Decimal(8, 2)
+  parking_slots          Int?
+  
+  // Furnishing & Amenities
+  furnishing_level       FurnishingLevel?
+  amenities              Json?    @default("[]")
+  
+  // Short-term Booking Essentials
+  checkin_time           String?  // TIME stored as string "HH:mm"
+  checkout_time          String?  // TIME stored as string "HH:mm"
+  max_occupancy          Int?
+  
+  // Utilities Billing (MID/LONG term)
+  electricity_billing    UtilityBilling?
+  water_billing          UtilityBilling?
+  
+  // Structured Metadata (JSONB)
+  metadata               Json     @default("{\"version\": 1}")
+  
+  // Pricing Policy Integration
+  pricing_policy_id      String?
+  pricing_policy_version Int?
+  pricing_override       Json?
+  pricing_snapshot_at    DateTime?
+  
+  // Legacy fields (keep for compatibility)
+  house_rules            Json?    @default("[]")
+  instant_booking        Boolean? @default(false)
+  advance_booking_days   Int?     @default(1)
+  cancellation_policy    String?  @default("MODERATE")
+  
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [org_id], references: [id])
+  space_node   SpaceNode    @relation(fields: [space_node_id], references: [id])
+  pricing_policy PricingPolicy? @relation(fields: [pricing_policy_id], references: [id], onDelete: SetNull)
+  listings     ListingRentableItem[]
+  bookings     Booking[]
+  agreements   Agreement[]
+  invoices     Invoice[]
+
+  @@unique([org_id, space_node_id, code])
+  @@index([org_id])
+  @@index([property_category])
+  @@index([rental_duration_type])
+  @@index([province])
+  @@index([district])
+  @@index([ward])
+  @@index([base_price])
+  @@index([bedrooms])
+  @@index([furnishing_level])
+  @@index([property_category, rental_duration_type, status])
+  @@index([pricing_policy_id, pricing_policy_version])
+  @@map("rentable_items")
+}
+
+// ============================================================================
+// PRICING POLICIES
+// ============================================================================
+
+model PricingPolicy {
+  id                      String    @id @default(uuid())
+  org_id                  String
+  
+  // Basic Info
+  name                    String
+  description             String?   @db.Text
+  status                  String    @default("ACTIVE")
+  
+  // Versioning
+  version                 Int       @default(1)
+  effective_from          DateTime  @default(now())
+  effective_to            DateTime?
+  updated_reason          String?   @db.Text
+  
+  // Applicability
+  property_category       String
+  rental_duration_type    String
+  
+  // Geographic Scope
+  scope_province          String?
+  scope_district          String?
+  
+  // Pricing Mode
+  pricing_mode            String    @default("FIXED")
+  
+  // Core Pricing
+  base_price              Decimal   @db.Decimal(15, 2)
+  price_unit              String
+  min_rent_duration       Int
+  
+  // Deposits
+  deposit_amount          Decimal?  @db.Decimal(15, 2)
+  booking_hold_deposit    Decimal?  @db.Decimal(15, 2)
+  
+  // Utilities & Fees
+  service_fee             Decimal?  @db.Decimal(15, 2)
+  building_management_fee Decimal?  @db.Decimal(15, 2)
+  electricity_billing     String?
+  water_billing           String?
+  
+  // Type-specific pricing (JSONB)
+  pricing_details         Json      @default("{}")
+  
+  // Tiered Pricing
+  tiered_pricing          Json?
+  
+  // Metadata
+  created_by              String?
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @updatedAt
+  superseded_by           String?
+  
+  organization            Organization           @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  creator                 User?                  @relation("PolicyCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  superseding_policy      PricingPolicy?         @relation("PolicySupersession", fields: [superseded_by], references: [id], onDelete: SetNull)
+  superseded_policies     PricingPolicy[]        @relation("PolicySupersession")
+  versions                PricingPolicyVersion[]
+  booking_snapshots       BookingPriceSnapshot[]
+  rentable_items          RentableItem[]
+  
+  @@index([org_id])
+  @@index([status])
+  @@index([property_category])
+  @@index([rental_duration_type])
+  @@index([version])
+  @@index([effective_from, effective_to])
+  @@index([scope_province, scope_district])
+  @@index([superseded_by])
+  @@map("pricing_policies")
+}
+
+model PricingPolicyVersion {
+  id              String   @id @default(uuid())
+  policy_id       String
+  version         Int
+  
+  // Snapshot
+  policy_snapshot Json
+  
+  // Change tracking
+  changed_by      String?
+  changed_at      DateTime @default(now())
+  change_reason   String   @db.Text
+  change_type     String
+  
+  // What changed
+  changed_fields  Json?
+  
+  policy          PricingPolicy @relation(fields: [policy_id], references: [id], onDelete: Cascade)
+  changer         User?         @relation(fields: [changed_by], references: [id], onDelete: SetNull)
+  
+  @@unique([policy_id, version])
+  @@index([policy_id])
+  @@index([policy_id, version])
+  @@index([changed_at])
+  @@map("pricing_policy_versions")
+}
+
+model BookingPriceSnapshot {
+  id                       String   @id @default(uuid())
+  booking_id               String   @unique
+  
+  // Policy reference
+  pricing_policy_id        String?
+  pricing_policy_version   Int?
+  
+  // Snapshot
+  base_price               Decimal  @db.Decimal(15, 2)
+  price_unit               String
+  
+  // Calculation breakdown
+  calculation_breakdown    Json
+  
+  // Totals (denormalized)
+  subtotal                 Decimal  @db.Decimal(15, 2)
+  total_extras             Decimal  @default(0) @db.Decimal(15, 2)
+  total_discounts          Decimal  @default(0) @db.Decimal(15, 2)
+  total_peak_adjustments   Decimal  @default(0) @db.Decimal(15, 2)
+  total_fees               Decimal  @default(0) @db.Decimal(15, 2)
+  grand_total              Decimal  @db.Decimal(15, 2)
+  
+  // Deposits
+  booking_hold_deposit     Decimal? @db.Decimal(15, 2)
+  deposit_amount           Decimal? @db.Decimal(15, 2)
+  payable_now              Decimal  @db.Decimal(15, 2)
+  
+  // Metadata
+  calculated_at            DateTime @default(now())
+  calculated_by            String
+  
+  booking                  Booking        @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+  pricing_policy           PricingPolicy? @relation(fields: [pricing_policy_id], references: [id], onDelete: SetNull)
+  
+  @@index([booking_id])
+  @@index([pricing_policy_id, pricing_policy_version])
+  @@map("booking_price_snapshots")
+}
+
+model Agreement {
+  id                String    @id @default(uuid())
+  org_id            String
+  landlord_party_id String
+  tenant_party_id   String
+  rentable_item_id  String?
+  
+  // Identity (Yêu cầu 1)
+  contract_code     String?   @unique  // Auto-generated: AG-2026-00012
+  contract_title    String?              // VD: "HĐ thuê căn 2PN Vinhomes Q9"
+  
+  // State: DRAFT, SENT, PENDING_CONFIRM, ACTIVE, EXPIRED, TERMINATED, CANCELLED
+  state             String    @default("DRAFT")
+  agreement_type    String    // lease (mid/long term), booking (short term)
+  
+  // Party Information
+  tenant_id_number  String?   // CCCD/Passport của tenant (nhập tay khi tạo HĐ)
+  
+  // Dates (Yêu cầu 4)
+  start_at          DateTime
+  end_at            DateTime?
+  billing_day       Int?      @default(1)  // Ngày chốt hóa đơn (1-28)
+  payment_due_days  Int?      @default(5)  // Hạn thanh toán (số ngày)
+  
+  // Pricing (Yêu cầu 5)
+  base_price              Decimal? @db.Decimal(15, 2)
+  deposit_amount          Decimal? @default(0) @db.Decimal(15, 2)
+  service_fee             Decimal? @default(0) @db.Decimal(15, 2)
+  building_mgmt_fee       Decimal? @default(0) @db.Decimal(15, 2)
+  parking_fee_motorbike   Decimal? @default(0) @db.Decimal(15, 2)  // Phí gửi xe máy
+  parking_fee_car         Decimal? @default(0) @db.Decimal(15, 2)  // Phí gửi ô tô
+  internet_fee            Decimal? @default(0) @db.Decimal(15, 2)  // Internet
+  
+  // Utilities (Yêu cầu 6)
+  electricity_billing     String?  // METER_PRIVATE, SHARED, OWNER_RATE, STATE_RATE, INCLUDED
+  electricity_rate        Decimal? @db.Decimal(10, 2)  // Giá điện (nếu OWNER_RATE)
+  water_billing           String?  // METER_PRIVATE, SHARED, OWNER_RATE, STATE_RATE, INCLUDED
+  water_rate              Decimal? @db.Decimal(10, 2)  // Giá nước (nếu OWNER_RATE)
+  
+  // Price increase (for LONG_TERM)
+  price_increase_percent  Decimal? @db.Decimal(5, 2)
+  price_increase_frequency String? // YEARLY, NONE
+  
+  // Payment
+  payment_cycle           String?  @default("MONTHLY") // MONTHLY, QUARTERLY, YEARLY
+  
+  // Terms & Rules (Yêu cầu 7)
+  house_rules             String?  // Nội quy chung
+  termination_clause      String?  // Điều khoản chấm dứt trước hạn
+  violation_penalty       Decimal? @db.Decimal(15, 2)  // Phí phạt vi phạm
+  allow_pets              Boolean? @default(false)
+  allow_smoking           Boolean? @default(false)
+  allow_guests            Boolean? @default(true)
+  
+  // Handover (Yêu cầu 8)
+  handover_date           DateTime?
+  handover_condition      String?  // Tình trạng hiện tại
+  furniture_list          Json?    // Danh sách nội thất
+  initial_electricity     Decimal? @db.Decimal(10, 2)  // Chỉ số điện ban đầu
+  initial_water           Decimal? @db.Decimal(10, 2)  // Chỉ số nước ban đầu
+  handover_document_url   String?  // Link biên bản bàn giao
+  
+  // Documents (Yêu cầu 9)
+  contract_document_url   String?  // File hợp đồng PDF
+  tenant_id_document_url  String?  // CCCD tenant
+  property_document_url   String?  // Giấy tờ căn hộ
+  
+  // Status tracking
+  sent_at                 DateTime?
+  confirmed_at            DateTime?
+  activated_at            DateTime?
+  terminated_at           DateTime?
+  expired_at              DateTime?
+  rejected_at             DateTime?
+  
+  // Termination
+  termination_reason      String?
+  termination_type        String?  // EARLY, NATURAL, CANCELLED
+  termination_penalty     Decimal? @db.Decimal(15, 2)
+  deposit_refund_amount   Decimal? @db.Decimal(15, 2)
+  rejection_reason        String?
+  
+  // Renewal
+  renewal_of_agreement_id String?
+  is_renewed              Boolean  @default(false)
+  
+  // Tenant requests
+  pending_request_type    String?  // RENEW, TERMINATE, null
+  pending_request_data    Json?
+  pending_request_at      DateTime?
+  
+  // Snapshots (when activated)
+  snapshot_terms          Json?
+  snapshot_pricing        Json?
+  
+  // Terms & Notes
+  terms_json              Json     @default("{}")
+  landlord_notes          String?
+  tenant_notes            String?
+  
+  // Timestamps
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  // Relations
+  organization            Organization  @relation(fields: [org_id], references: [id])
+  rentable_item           RentableItem? @relation(fields: [rentable_item_id], references: [id], onDelete: SetNull)
+  renewal_of              Agreement?    @relation("AgreementRenewal", fields: [renewal_of_agreement_id], references: [id], onDelete: SetNull)
+  renewals                Agreement[]   @relation("AgreementRenewal")
+  invoices                Invoice[]
+
+  @@index([org_id, state])
+  @@index([rentable_item_id])
+  @@index([tenant_party_id])
+  @@index([landlord_party_id])
+  @@index([start_at, end_at])
+  @@index([contract_code])
+  @@map("agreements")
+}
+
+// ============================================================================
+// MARKETPLACE
+// ============================================================================
+
+model Listing {
+  id              String    @id @default(uuid())
+  org_id          String
+  title           String
+  description     String?
+  media           Json      @default("[]")
+  tags            Json      @default("[]")
+  pricing_display Json      @default("{}")
+  status          String    @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  is_featured     Boolean   @default(false)
+  view_count      Int       @default(0)
+  last_viewed_at  DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  organization   Organization          @relation(fields: [org_id], references: [id])
+  rentable_items ListingRentableItem[]
+  leads          Lead[]
+
+  @@index([org_id, status])
+  @@index([is_featured, status])
+  @@map("listings")
+}
+
+model ListingRentableItem {
+  listing_id       String
+  rentable_item_id String
+
+  listing       Listing      @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+  rentable_item RentableItem @relation(fields: [rentable_item_id], references: [id], onDelete: Cascade)
+
+  @@id([listing_id, rentable_item_id])
+  @@map("listing_rentable_items")
+}
+
+model Lead {
+  id         String   @id @default(uuid())
+  org_id     String
+  listing_id String?
+  name       String
+  email      String
+  phone      String?
+  message    String?
+  status     String   @default("NEW") // NEW, CONTACTED, QUALIFIED, CONVERTED, LOST
+  metadata   Json     @default("{}")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization Organization @relation(fields: [org_id], references: [id])
+  listing      Listing?     @relation(fields: [listing_id], references: [id])
+
+  @@index([org_id, status])
+  @@map("leads")
+}
+
+model Booking {
+  id               String    @id @default(uuid())
+  org_id           String
+  rentable_item_id String
+  tenant_party_id  String
+  start_at         DateTime
+  end_at           DateTime?
+  quantity         Int       @default(1)
+  status           String    @default("PENDING") // PENDING, CONFIRMED, CHECKED_IN, CHECKED_OUT, COMPLETED, CANCELLED, NO_SHOW
+  metadata         Json      @default("{}")
+  
+  // Walk-in booking support
+  actual_start_at           DateTime?
+  actual_end_at             DateTime?
+  is_walk_in                Boolean   @default(false)
+  estimated_duration_hours  Int?
+  walk_in_notes             String?
+  
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  organization  Organization          @relation(fields: [org_id], references: [id])
+  rentable_item RentableItem          @relation(fields: [rentable_item_id], references: [id])
+  price_snapshot BookingPriceSnapshot?
+  invoices      Invoice[]
+
+  @@index([org_id, rentable_item_id])
+  @@index([org_id, status])
+  @@index([actual_start_at])
+  @@index([actual_end_at])
+  @@index([is_walk_in])
+  @@index([status, start_at])
+  @@map("bookings")
+}
+
+// ============================================================================
+// FINANCE
+// ============================================================================
+
+model Invoice {
+  id               String    @id @default(uuid())
+  org_id           String
+  agreement_id     String
+  tenant_party_id  String?
+  rentable_item_id String?
+  booking_id       String?
+  invoice_code     String    @unique
+  period_start     DateTime  @db.Date
+  period_end       DateTime  @db.Date
+  issued_at        DateTime?
+  due_at           DateTime?
+  currency         String    @default("VND")
+  subtotal_amount  BigInt
+  tax_enabled      Boolean   @default(false)
+  tax_rate         Decimal   @default(0) @db.Decimal(5, 2)
+  tax_amount       BigInt    @default(0)
+  total_amount     BigInt
+  balance_due      BigInt
+  state            String    @default("DRAFT") // DRAFT, ISSUED, PAID, PARTIALLY_PAID, OVERDUE, CANCELLED
+  status           String    @default("ISSUED") // Legacy field, use state instead
+  notes            String?   @db.Text
+  line_items       Json      @default("[]") // Legacy field, use InvoiceLineItem table
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  organization     Organization      @relation(fields: [org_id], references: [id])
+  agreement        Agreement         @relation(fields: [agreement_id], references: [id])
+  tenant_party     Party?            @relation("InvoiceTenant", fields: [tenant_party_id], references: [id])
+  rentable_item    RentableItem?     @relation(fields: [rentable_item_id], references: [id])
+  booking          Booking?          @relation(fields: [booking_id], references: [id])
+  payments         Payment[]
+  line_items_table InvoiceLineItem[] @relation("InvoiceLineItems")
+
+  @@index([org_id, state])
+  @@index([org_id, status])
+  @@index([agreement_id])
+  @@index([tenant_party_id])
+  @@index([rentable_item_id])
+  @@index([booking_id])
+  @@index([invoice_code])
+  @@index([due_at])
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(uuid())
+  invoice_id  String
+  type        String   // RENT, SERVICE_FEE, MGMT_FEE, ELECTRICITY, WATER, PARKING, INTERNET, OTHER
+  description String   @db.Text
+  qty         Decimal  @default(1) @db.Decimal(10, 2)
+  unit_price  BigInt
+  amount      BigInt
+  metadata    Json     @default("{}")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  invoice Invoice @relation("InvoiceLineItems", fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@index([invoice_id])
+  @@index([type])
+  @@map("invoice_line_items")
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  org_id            String
+  invoice_id        String
+  provider          String   // vnpay, momo, stripe
+  amount            BigInt
+  currency          String   @default("VND")
+  status            String   // PENDING, SUCCEEDED, FAILED, REFUNDED
+  idempotency_key   String
+  provider_event_id String?
+  raw_json          Json     @default("{}")
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  organization Organization @relation(fields: [org_id], references: [id])
+  invoice      Invoice      @relation(fields: [invoice_id], references: [id])
+
+  @@unique([org_id, invoice_id, idempotency_key])
+  @@index([org_id])
+  @@index([provider_event_id])
+  @@map("payments")
+}
+
+model LedgerEntry {
+  id          String   @id @default(uuid())
+  org_id      String
+  entry_type  String   // INVOICE_ISSUED, PAYMENT_SUCCEEDED, REFUND, CHARGEBACK
+  ref_type    String   // Invoice, Payment, Agreement
+  ref_id      String
+  amount      BigInt
+  currency    String   @default("VND")
+  direction   String   // debit, credit
+  occurred_at DateTime
+  metadata    Json     @default("{}")
+  created_at  DateTime @default(now())
+
+  organization Organization @relation(fields: [org_id], references: [id])
+
+  @@index([org_id, occurred_at])
+  @@map("ledger_entries")
+}
+
+// ============================================================================
+// OPERATIONS
+// ============================================================================
+
+model Ticket {
+  id             String   @id @default(uuid())
+  org_id         String
+  title          String
+  description    String?
+  status         String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  priority       String   @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  category       String   @default("REQUEST") // MAINTENANCE, REPAIR, COMPLAINT, REQUEST, EMERGENCY
+  reporter_id    String
+  assigned_to    String?
+  agreement_id   String?
+  asset_id       String?
+  space_node_id  String?
+  metadata       Json     @default("{}")
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  organization   Organization @relation(fields: [org_id], references: [id])
+  reporter       User         @relation("TicketReporter", fields: [reporter_id], references: [id])
+  assigned_user  User?        @relation("TicketAssigned", fields: [assigned_to], references: [id])
+
+  @@index([org_id, status])
+  @@index([reporter_id])
+  @@index([assigned_to])
+  @@map("tickets")
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  org_id     String
+  user_id    String
+  type       String   // EMAIL, SMS, IN_APP, PUSH
+  title      String
+  message    String
+  status     String   @default("UNREAD") // UNREAD, READ, SENT, FAILED
+  metadata   Json     @default("{}")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization Organization @relation(fields: [org_id], references: [id])
+  user         User         @relation(fields: [user_id], references: [id])
+
+  @@index([org_id, user_id])
+  @@index([status])
+  @@map("notifications")
+}
+
+// ============================================================================
+// REFERENCE TABLES (Property Types System)
+// ============================================================================
+
+model PropertyCategory {
+  code                 String   @id
+  name_vi              String
+  name_en              String
+  duration_type        String
+  icon                 String?
+  description          String?
+  typical_pricing_unit String?
+  typical_min_days     Int?
+  display_order        Int      @default(0)
+  created_at           DateTime @default(now())
+
+  @@index([duration_type])
+  @@map("property_categories")
+}
+
+model Amenity {
+  code           String   @id
+  name_vi        String
+  name_en        String
+  icon           String?
+  category       String?
+  applicable_to  Json     @default("[]")
+  display_order  Int      @default(0)
+  created_at     DateTime @default(now())
+
+  @@index([category])
+  @@map("amenities")
+}

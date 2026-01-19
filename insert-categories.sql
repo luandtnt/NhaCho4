@@ -1,0 +1,23 @@
+-- Insert property categories with proper UTF-8 encoding
+INSERT INTO property_categories (code, name_vi, name_en, duration_type, icon, description, typical_pricing_unit, typical_min_days, display_order) VALUES
+('HOMESTAY', 'Homestay', 'Homestay', 'SHORT_TERM', '🏠', 'Nhà dân với không gian chung', 'night', 1, 1),
+('GUESTHOUSE', 'Nhà nghỉ', 'Guesthouse', 'SHORT_TERM', '🏘️', 'Nhà nghỉ cơ bản', 'night', 1, 2),
+('HOTEL', 'Khách sạn', 'Hotel', 'SHORT_TERM', '🏨', 'Khách sạn chuyên nghiệp', 'night', 1, 3),
+('SERVICED_APARTMENT_SHORT', 'Căn hộ dịch vụ ngắn hạn', 'Serviced Apartment (Short)', 'SHORT_TERM', '🏢', 'Căn hộ dịch vụ cho thuê ngắn hạn', 'night', 1, 4),
+('VILLA_RESORT', 'Villa nghỉ dưỡng', 'Villa Resort', 'SHORT_TERM', '🏖️', 'Biệt thự nghỉ dưỡng', 'night', 1, 5),
+('AIRBNB_ROOM', 'Phòng riêng lẻ', 'Airbnb Room', 'SHORT_TERM', '🛏️', 'Phòng riêng trong nhà chung', 'night', 1, 6),
+('CO_LIVING_SHORT', 'Co-living ngắn hạn', 'Co-living (Short)', 'SHORT_TERM', '👥', 'Không gian sống chia sẻ ngắn hạn', 'night', 1, 7),
+('PRIVATE_HOUSE', 'Nhà riêng', 'Private House', 'MEDIUM_TERM', '🏡', 'Nhà riêng nguyên căn', 'month', 30, 8),
+('ROOM_RENTAL', 'Phòng trọ', 'Room Rental', 'MEDIUM_TERM', '🛏️', 'Phòng trọ cho thuê', 'month', 30, 9),
+('APARTMENT', 'Căn hộ', 'Apartment', 'MEDIUM_TERM', '🏢', 'Căn hộ chung cư', 'month', 30, 10),
+('SERVICED_APARTMENT_MEDIUM', 'Căn hộ dịch vụ trung hạn', 'Serviced Apartment (Medium)', 'MEDIUM_TERM', '🏢', 'Căn hộ dịch vụ cho thuê trung hạn', 'month', 30, 11),
+('WHOLE_HOUSE', 'Nhà nguyên căn', 'Whole House', 'MEDIUM_TERM', '🏠', 'Nhà nguyên căn cho thuê', 'month', 30, 12),
+('SMALL_RETAIL', 'Mặt bằng kinh doanh nhỏ', 'Small Retail Space', 'MEDIUM_TERM', '🏪', 'Mặt bằng kinh doanh nhỏ', 'month', 30, 13),
+('TEMP_WAREHOUSE', 'Kho xưởng tạm', 'Temporary Warehouse', 'MEDIUM_TERM', '📦', 'Kho xưởng cho thuê tạm thời', 'month', 30, 14),
+('OFFICE', 'Văn phòng', 'Office', 'LONG_TERM', '🏢', 'Văn phòng làm việc', 'month', 180, 15),
+('LAND', 'Đất nền', 'Land', 'LONG_TERM', '🌾', 'Đất nền cho thuê', 'month', 180, 16),
+('WAREHOUSE', 'Nhà xưởng', 'Warehouse', 'LONG_TERM', '🏭', 'Nhà xưởng, kho bãi', 'month', 180, 17),
+('COMMERCIAL', 'Mặt bằng thương mại', 'Commercial Space', 'LONG_TERM', '🏬', 'Mặt bằng thương mại lớn', 'month', 180, 18),
+('CONDO', 'Chung cư cao cấp', 'Luxury Apartment', 'LONG_TERM', '🏙️', 'Chung cư cao cấp', 'month', 180, 19),
+('VILLA', 'Biệt thự', 'Villa', 'LONG_TERM', '🏰', 'Biệt thự sang trọng', 'month', 180, 20),
+('SHOPHOUSE', 'Nhà phố kinh doanh', 'Shophouse', 'LONG_TERM', '🏪', 'Nhà phố kết hợp kinh doanh', 'month', 180, 21);

@@ -1,0 +1,319 @@
+openapi: 3.0.3
+info:
+  title: URP API
+  description: Universal Rental Platform API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: API v1
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error_code
+        - message
+        - request_id
+      properties:
+        error_code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN_SCOPE
+            - NOT_FOUND
+            - CONFLICT
+            - RATE_LIMITED
+            - PROVIDER_ERROR
+            - INTERNAL_ERROR
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+        request_id:
+          type: string
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 900
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        role:
+          type: string
+          enum: [Tenant, Landlord, PropertyManager, OrgAdmin, PlatformAdmin]
+        status:
+          type: string
+        org_id:
+          type: string
+          format: uuid
+        organization:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            status:
+              type: string
+
+    ConfigBundle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: string
+          format: uuid
+        bundle_id:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, ARCHIVED]
+        config:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login with email/password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '201':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '201':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                  expires_in:
+                    type: integer
+
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout (invalidate refresh token)
+      responses:
+        '201':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /auth/me:
+    get:
+      tags:
+        - Auth
+      summary: Get current user profile
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+
+  /configs/bundles:
+    post:
+      tags:
+        - Config Engine
+      summary: Create config bundle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bundle_id
+                - version
+                - config
+              properties:
+                bundle_id:
+                  type: string
+                version:
+                  type: string
+                status:
+                  type: string
+                config:
+                  type: object
+      responses:
+        '201':
+          description: Config bundle created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigBundle'
+
+    get:
+      tags:
+        - Config Engine
+      summary: List config bundles
+      responses:
+        '200':
+          description: List of config bundles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConfigBundle'
+
+  /configs/bundles/{id}:
+    get:
+      tags:
+        - Config Engine
+      summary: Get config bundle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Config bundle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigBundle'
+
+  /configs/bundles/{id}/activate:
+    post:
+      tags:
+        - Config Engine
+      summary: Activate config bundle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Config bundle activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigBundle'
+
+  /configs/bundles/{id}/rollback:
+    post:
+      tags:
+        - Config Engine
+      summary: Rollback to previous config bundle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Config bundle rolled back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigBundle'

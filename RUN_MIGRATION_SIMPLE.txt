@@ -1,0 +1,29 @@
+# ===================================
+# CHẠY MIGRATION - SIMPLE VERSION
+# ===================================
+
+Bước 1: Chạy migration
+-----------------------
+node apply-walk-in-migration.js
+
+
+Bước 2: Generate Prisma Client
+-------------------------------
+cd apps/backend
+npx prisma generate
+cd ../..
+
+
+Bước 3: Restart backend
+------------------------
+Ctrl+C (stop backend)
+cd apps/backend
+npm run dev
+
+
+DONE! ✅
+========
+
+Sau đó test tại:
+- http://localhost:5173/quick-checkin
+- http://localhost:5173/active-bookings

@@ -1,0 +1,29 @@
+========================================
+RESTART BACKEND - QUAN TRỌNG!
+========================================
+
+Bước 1: Stop backend hiện tại
+------------------------------
+Nhấn Ctrl+C trong terminal đang chạy backend
+
+
+Bước 2: Clear cache và restart
+-------------------------------
+cd apps/backend
+rm -rf dist
+npm run dev
+
+
+Hoặc đơn giản hơn:
+------------------
+Ctrl+C (stop)
+npm run dev (start lại)
+
+
+Lý do:
+------
+Prisma Client đã được regenerate với các columns mới,
+nhưng TypeScript cần restart để load lại types mới.
+
+
+Sau khi restart, backend sẽ compile thành công! ✅

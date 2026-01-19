@@ -1,0 +1,34 @@
+========================================
+CHẠY MIGRATION - ĐƠN GIẢN NHẤT
+========================================
+
+Bước 1: Mở terminal tại thư mục gốc
+------------------------------------
+(Bạn đang ở đây rồi)
+
+
+Bước 2: Chạy lệnh này
+----------------------
+cd apps/backend
+npx ts-node scripts/run-walk-in-migration.ts
+
+
+Bước 3: Restart backend
+------------------------
+npm run dev
+
+
+XONG! ✅
+========
+
+Sau đó test tại:
+- http://localhost:5173/quick-checkin
+- http://localhost:5173/active-bookings
+
+
+NẾU BỊ LỖI "ts-node not found"
+-------------------------------
+Chạy trước:
+npm install -D ts-node
+
+Rồi chạy lại Bước 2

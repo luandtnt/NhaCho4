@@ -1,0 +1,68 @@
+═══════════════════════════════════════════════════════════
+  🔄 KHÔI PHỤC DỮ LIỆU - DATABASE BỊ XÓA
+═══════════════════════════════════════════════════════════
+
+⚠️  VẤN ĐỀ: Database đã bị xóa khi chạy migration Invoice Module
+
+✅ GIẢI PHÁP: Chạy 1 trong 2 script sau để khôi phục dữ liệu
+
+═══════════════════════════════════════════════════════════
+
+📌 OPTION 1: KHÔI PHỤC DỮ LIỆU (KHÔNG XÓA DATABASE)
+───────────────────────────────────────────────────────────
+Dùng khi: Database trống hoặc muốn thêm dữ liệu mẫu
+
+CÁCH CHẠY:
+1. Stop backend (Ctrl+C)
+2. Chạy lệnh:
+   .\restore-all-data.ps1
+
+═══════════════════════════════════════════════════════════
+
+📌 OPTION 2: RESET & TẠO MỚI (XÓA HẾT DATABASE)
+───────────────────────────────────────────────────────────
+Dùng khi: Muốn bắt đầu lại từ đầu với dữ liệu sạch
+
+CÁCH CHẠY:
+1. Stop backend (Ctrl+C)
+2. Chạy lệnh:
+   .\reset-and-restore-all.ps1
+3. Xác nhận:
+   - Gõ "yes"
+   - Gõ "DELETE ALL"
+
+═══════════════════════════════════════════════════════════
+
+📦 DỮ LIỆU SẼ ĐƯỢC TẠO:
+───────────────────────────────────────────────────────────
+✅ 3 Listings (tin đăng)
+✅ 1 Asset với 3 units (Sunrise Apartments)
+✅ 3 Rentable Items (căn cho thuê)
+✅ 3 Bookings (CONFIRMED, CHECKED_IN, COMPLETED)
+✅ 2 Agreements (ACTIVE, DRAFT)
+✅ 2 Pricing Policies
+✅ 3 Invoices (ISSUED, PAID, DRAFT)
+✅ Và nhiều dữ liệu khác...
+
+═══════════════════════════════════════════════════════════
+
+🔑 ĐĂNG NHẬP SAU KHI KHÔI PHỤC:
+───────────────────────────────────────────────────────────
+Landlord: landlord@example.com / Password123!
+Tenant:   tenant@example.com / Password123!
+Admin:    admin@example.com / Password123!
+
+═══════════════════════════════════════════════════════════
+
+📚 XEM THÊM CHI TIẾT:
+───────────────────────────────────────────────────────────
+- KHOI_PHUC_DU_LIEU.md (Hướng dẫn ngắn gọn)
+- DATA_RECOVERY_GUIDE.md (Hướng dẫn chi tiết)
+- DATA_LOSS_RECOVERY_COMPLETE.md (Báo cáo đầy đủ)
+
+═══════════════════════════════════════════════════════════
+
+💡 KHUYẾN NGHỊ: Chạy Option 2 (reset-and-restore-all.ps1)
+   để có database sạch và đầy đủ nhất!
+
+═══════════════════════════════════════════════════════════
