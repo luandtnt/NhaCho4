@@ -20,8 +20,6 @@ export class PartyHelper {
       select: { email: true, role: true },
     });
 
-    console.log('[PartyHelper] getLandlordPartyId - userId:', userId, 'user:', user);
-
     if (!user) return null;
 
     // If not landlord, return null
@@ -36,8 +34,6 @@ export class PartyHelper {
       },
       select: { id: true },
     });
-
-    console.log('[PartyHelper] getLandlordPartyId - Found party:', party);
 
     return party?.id || null;
   }
